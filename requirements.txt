@@ -1,0 +1,5 @@
+# Flask 2.x depends on pkgutil.get_loader, which was removed in Python 3.14.
+# To ensure compatibility with Python 3.14 and later, require Flask 3.0 or higher.
+Flask>=3.0.0
+python-dotenv>=1.0.0
+PyMySQL==1.1.0

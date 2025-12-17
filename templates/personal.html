@@ -1,0 +1,112 @@
+{% extends "layout.html" %}
+{% block title %}Personal{% endblock %}
+{% block content %}
+<h2 class="mb-4">Personal</h2>
+
+<!-- Search form and import button -->
+<div class="row align-items-end mb-3">
+    <div class="col-lg-6">
+        <form class="row g-3 align-items-end" method="get" action="{{ url_for('personal') }}">
+            <div class="col-12 col-lg-8">
+                <label for="q" class="form-label">Buscar empleado</label>
+                <input type="text" name="q" id="q" value="{{ query }}" class="form-control" placeholder="ID o nombre">
+            </div>
+            <div class="col-12 col-lg-4 mt-3 mt-lg-0">
+                <button type="submit" class="btn btn-outline-primary w-100">Buscar</button>
+            </div>
+        </form>
+    </div>
+    <div class="col-lg-4 offset-lg-2 mt-3 mt-lg-0 d-flex justify-content-lg-end">
+        <form method="post" action="{{ url_for('personal') }}">
+            <input type="hidden" name="action" value="importar">
+            <button type="submit" class="btn btn-success">Actualizar personal</button>
+        </form>
+    </div>
+</div>
+
+<!-- Employees table -->
+<div class="table-responsive">
+    <table class="table table-bordered align-middle">
+        <thead class="table-light">
+            <tr>
+                <th>ID empleado</th>
+                <th>Nombre</th>
+                <th>Puesto</th>
+                <th>Jefe directo</th>
+                <th>Correo</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for e in empleados %}
+            <tr>
+                <td>{{ e.id_empleado }}</td>
+                <td>{{ e.nombre }}</td>
+                <td>{{ e.puesto_nombre or '-' }}</td>
+                <td>{{ e.jefe_nombre or '-' }}</td>
+                <td>{{ e.email or '-' }}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editEmpleadoModal{{ e.id }}">Editar</button>
+                </td>
+            </tr>
+            <!-- Edit empleado modal -->
+            <div class="modal fade" id="editEmpleadoModal{{ e.id }}" tabindex="-1" aria-labelledby="editEmpleadoLabel{{ e.id }}" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <form method="post" action="{{ url_for('personal') }}">
+                            <input type="hidden" name="action" value="edit_empleado">
+                            <input type="hidden" name="empleado_id" value="{{ e.id }}">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="editEmpleadoLabel{{ e.id }}">Editar empleado</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="mb-3">
+                                    <label class="form-label">ID empleado</label>
+                                    <input type="text" class="form-control" value="{{ e.id_empleado }}" disabled>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Nombre</label>
+                                    <input type="text" name="nombre" class="form-control" value="{{ e.nombre }}" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Puesto</label>
+                                    <select name="puesto_id" class="form-select">
+                                        <option value="">-- seleccionar --</option>
+                                        {% for p in puestos %}
+                                            <option value="{{ p.id }}" {% if e.puesto_id == p.id %}selected{% endif %}>{{ p.nombre }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Jefe directo</label>
+                                    <select name="jefe_directo_id" class="form-select">
+                                        <option value="">-- ninguno --</option>
+                                        {% for j in jefes %}
+                                            {% if j.id != e.id %}
+                                            <option value="{{ j.id }}" {% if e.jefe_id == j.id %}selected{% endif %}>{{ j.nombre }}</option>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Correo electrónico</label>
+                                    <input type="email" name="email" class="form-control" value="{{ e.email or '' }}">
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="submit" class="btn btn-primary">Guardar</button>
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            {% if not empleados %}
+            <tr><td colspan="6" class="text-center text-muted">No se encontró personal.</td></tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

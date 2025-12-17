@@ -1,0 +1,25 @@
+/* Custom global styles for KPI Manager */
+body {
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 0.95rem;
+}
+
+/* Limit width of description cells to avoid overflowing modals */
+td {
+    vertical-align: middle;
+}
+
+.table-responsive {
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+/* Cards for subordinate KPIs */
+.card-header {
+    font-weight: 500;
+}
+
+/* Buttons */
+.btn-success {
+    color: #fff;
+}

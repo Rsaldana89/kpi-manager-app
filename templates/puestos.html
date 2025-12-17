@@ -1,0 +1,166 @@
+{% extends "layout.html" %}
+{% block title %}Puestos{% endblock %}
+{% block content %}
+<h2 class="mb-4">Puestos</h2>
+
+<!-- Button to trigger creation modal -->
+<button class="btn btn-success mb-3" data-bs-toggle="modal" data-bs-target="#nuevoPuestoModal">Nuevo puesto</button>
+
+<!-- Positions table -->
+<div class="table-responsive">
+    <table class="table table-bordered align-middle">
+        <thead class="table-light">
+            <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Departamento</th>
+                <th>Jefe de puesto</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in puestos %}
+            <tr>
+                <td>{{ p.id }}</td>
+                <td>{{ p.nombre }}</td>
+                <td>{{ p.departamento or '-' }}</td>
+                <td>{{ p.jefe_nombre or '-' }}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editPuestoModal{{ p.id }}">Editar</button>
+                    <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#asignarKpiModal{{ p.id }}">KPIs</button>
+                </td>
+            </tr>
+            <!-- Edit puesto modal -->
+            <div class="modal fade" id="editPuestoModal{{ p.id }}" tabindex="-1" aria-labelledby="editPuestoLabel{{ p.id }}" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <form method="post" action="{{ url_for('puestos') }}">
+                            <input type="hidden" name="action" value="edit_puesto">
+                            <input type="hidden" name="puesto_id" value="{{ p.id }}">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="editPuestoLabel{{ p.id }}">Editar puesto</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="mb-3">
+                                    <label class="form-label">Nombre</label>
+                                    <input type="text" name="nombre" class="form-control" value="{{ p.nombre }}" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Departamento</label>
+                                    <select name="departamento_id" class="form-select">
+                                        <option value="">-- seleccionar --</option>
+                                        {% for d in departamentos %}
+                                            <option value="{{ d.id }}" {% if p.departamento == d.nombre %}selected{% endif %}>{{ d.nombre }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Jefe de puesto</label>
+                                    <select name="jefe_puesto_id" class="form-select">
+                                        <option value="">-- ninguno --</option>
+                                        {% for j in puestos_simple %}
+                                            {% if j.id != p.id %}
+                                            <option value="{{ j.id }}" {% if p.jefe_puesto_id == j.id %}selected{% endif %}>{{ j.nombre }}</option>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="submit" class="btn btn-primary">Guardar cambios</button>
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <!-- Asignar KPIs modal -->
+            <div class="modal fade" id="asignarKpiModal{{ p.id }}" tabindex="-1" aria-labelledby="asignarKpiLabel{{ p.id }}" aria-hidden="true">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <form method="post" action="{{ url_for('puestos') }}">
+                            <input type="hidden" name="action" value="asignar_kpis">
+                            <input type="hidden" name="puesto_id" value="{{ p.id }}">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="asignarKpiLabel{{ p.id }}">Asignar KPIs a {{ p.nombre }}</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <h6>Seleccionar KPIs</h6>
+                                        <div class="form-check" style="max-height:300px; overflow-y:auto;">
+                                            {% for k in kpis %}
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="kpis" value="{{ k.id }}" id="chk_p{{ p.id }}_k{{ k.id }}" {% if p.id in assigned_map and k.id in assigned_map[p.id] %}checked{% endif %}>
+                                                <label class="form-check-label" for="chk_p{{ p.id }}_k{{ k.id }}">#{{ k.id }} - {{ k.descripcion }}</label>
+                                            </div>
+                                            {% endfor %}
+                                            {% if not kpis %}
+                                                <p class="text-muted">No hay KPIs disponibles.</p>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="submit" class="btn btn-primary">Guardar asignaciones</button>
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            {% if not puestos %}
+            <tr><td colspan="5" class="text-center text-muted">No hay puestos registrados.</td></tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Nuevo puesto modal -->
+<div class="modal fade" id="nuevoPuestoModal" tabindex="-1" aria-labelledby="nuevoPuestoLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="{{ url_for('puestos') }}">
+                <input type="hidden" name="action" value="create_puesto">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="nuevoPuestoLabel">Nuevo puesto</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Nombre del puesto</label>
+                        <input type="text" name="nombre" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Departamento</label>
+                        <select name="departamento_id" class="form-select">
+                            <option value="">-- seleccionar --</option>
+                            {% for d in departamentos %}
+                                <option value="{{ d.id }}">{{ d.nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Jefe de puesto</label>
+                        <select name="jefe_puesto_id" class="form-select">
+                            <option value="">-- ninguno --</option>
+                            {% for j in puestos_simple %}
+                                <option value="{{ j.id }}">{{ j.nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary">Crear puesto</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

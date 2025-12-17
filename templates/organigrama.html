@@ -1,0 +1,72 @@
+{% extends "layout.html" %}
+{% block title %}Organigrama{% endblock %}
+{% block head %}
+    <!-- jsTree CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.12/themes/default/style.min.css" />
+{% endblock %}
+{% block content %}
+<h2 class="mb-4">Organigrama</h2>
+<div id="orgChart" class="border rounded p-3 bg-white"></div>
+<div class="mt-3 text-muted">Arrastra los nombres de los empleados para reasignarlos a otro puesto. Se te pedirá confirmación antes de guardar el cambio.</div>
+{% endblock %}
+{% block scripts %}
+    <!-- jQuery and jsTree -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.12/jstree.min.js"></script>
+    <script>
+    $(function() {
+        $('#orgChart').jstree({
+            'core' : {
+                'data' : {
+                    'url' : '{{ url_for('organigrama_data') }}',
+                    'dataType' : 'json'
+                },
+                'check_callback' : true
+            },
+            'plugins' : ['dnd', 'types'],
+            'types' : {
+                'default' : {
+                    'icon' : 'fas fa-sitemap text-primary'
+                },
+                'file' : {
+                    'icon' : 'fas fa-file'
+                }
+            }
+        });
+        // Handle move events
+        $('#orgChart').on('move_node.jstree', function(e, data) {
+            var nodeId = data.node.id;
+            var newParent = data.parent;
+            // Only allow moving employee nodes under puesto nodes
+            if(nodeId.startsWith('empleado_') && newParent.startsWith('puesto_')) {
+                var employeeId = nodeId.split('_')[1];
+                var puestoId = newParent.split('_')[1];
+                if(confirm('¿Deseas mover al empleado a este puesto?')) {
+                    $.ajax({
+                        url: '{{ url_for('organigrama_move') }}',
+                        method: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify({ employee_id: employeeId, puesto_id: puestoId }),
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                        success: function(response) {
+                            // success message
+                            console.log(response);
+                        },
+                        error: function(xhr) {
+                            alert('Error al mover al empleado: ' + xhr.responseJSON.error);
+                            // Reload tree to revert
+                            $('#orgChart').jstree(true).refresh();
+                        }
+                    });
+                } else {
+                    // Cancel move: refresh tree
+                    $('#orgChart').jstree(true).refresh();
+                }
+            } else {
+                // invalid move, revert
+                $('#orgChart').jstree(true).refresh();
+            }
+        });
+    });
+    </script>
+{% endblock %}
