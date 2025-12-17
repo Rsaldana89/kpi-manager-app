@@ -142,3 +142,53 @@ kpi_manager_app/
 ```
 
 Disfrute utilizando el sistema y adáptelo según sus necesidades.
+
+## Railway (deploy)
+
+1) Asegúrate de que el servicio use el comando de arranque:
+
+```
+gunicorn app:app --bind 0.0.0.0:$PORT
+```
+
+(El repo incluye `Procfile` con ese comando).
+
+2) En Railway **no subas el archivo `.env`**. Configura variables en la pestaña *Variables*:
+
+- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
+- (Opcional) `INCIDENCIAS_DB_HOST`, `INCIDENCIAS_DB_PORT`, `INCIDENCIAS_DB_USER`, `INCIDENCIAS_DB_PASSWORD`, `INCIDENCIAS_DB_NAME`
+
+Si la DB de incidencias no está configurada, el botón de importar solo mostrará un aviso.
+
+## Local (Windows / VSCode)
+
+1) Crea y activa un entorno:
+
+```
+python -m venv venv
+venv\Scripts\activate
+```
+
+2) Instala dependencias:
+
+```
+pip install -r requirements.txt
+```
+
+3) Crea un archivo `.env` con tu conexión local (ejemplo):
+
+```
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=...
+DB_NAME=kpi_manager
+```
+
+4) Ejecuta:
+
+```
+python app.py
+```
+
+La pantalla **Personal** está paginada (100 por página) y el buscador busca en toda la tabla.

@@ -17,6 +17,7 @@ production environment you should always hash and salt passwords.
 from __future__ import annotations
 
 import datetime
+import math
 """
 This Flask application implements an administration system for KPIs and
 organizational structure.  The code has been updated to ensure
@@ -715,21 +716,38 @@ def puestos():
 @app.route("/personal", methods=["GET", "POST"])
 @require_login
 def personal():
-    """Display and edit employee records.
+    """Display, import and edit employee records (with pagination).
 
-    Employees can be searched by id or name.  Editing allows updating
-    the name, position, direct supervisor and email.  The big
-    "actualizar personal" button imports new employees from the
-    incidencias table and attaches them to the appropriate position if
-    present.  Existing employees are not overwritten.
+    - List is paginated (100 per page) to keep the UI fast with large datasets.
+    - Search (q) is applied to the full table and results are paginated.
+    - Default ordering is alphabetical by employee name.
+    - Select lists (puestos, jefes) are ordered alphabetically by name.
+    - Import from incidencias normalizes employee_number to 5 digits (zfill(5))
+      to avoid duplicates (e.g. 123 -> 00123).
     """
+
+    def normalize_emp_id(value) -> str:
+        if value is None:
+            return ""
+        s = str(value).strip()
+        # Some sources may provide numeric ids; keep only digits if possible,
+        # then left-pad to 5. If it isn't purely digits, still pad the raw string.
+        digits = "".join(ch for ch in s if ch.isdigit())
+        base = digits if digits else s
+        return base.zfill(5)
+
     conn = get_db_connection()
+
+    # -----------------------------
+    # Edit employee
+    # -----------------------------
     if request.method == "POST" and request.form.get("action") == "edit_empleado":
         empleado_id = request.form.get("empleado_id")
-        nombre = request.form.get("nombre")
+        nombre = (request.form.get("nombre") or "").strip()
         puesto_id = request.form.get("puesto_id") or None
         jefe_directo_id = request.form.get("jefe_directo_id") or None
-        email = request.form.get("email") or None
+        email = (request.form.get("email") or "").strip() or None
+
         if not nombre:
             flash("El nombre del empleado no puede estar vacío", "danger")
         else:
@@ -745,42 +763,44 @@ def personal():
                     ),
                 )
             flash("Empleado actualizado correctamente", "success")
+        conn.close()
         return redirect(url_for("personal"))
-    # Handle import from external incidencias.  We import employees from
-    # the remote database defined in INCIDENCIAS_DB_CONFIG.  Only the
-    # fields employee_number, full_name, puesto and department_name are
-    # used.  If the employee already exists (based on id_empleado)
-    # they are skipped.  New departments and positions are created on
-    # demand.
+
+    # -----------------------------
+    # Import from incidencias
+    # -----------------------------
     if request.method == "POST" and request.form.get("action") == "importar":
         imported = 0
-        # Establish a connection to the remote incidencias DB
         inc_conn = get_incidencias_connection()
         if not inc_conn:
             flash("La base de datos de incidencias no está configurada", "danger")
+            conn.close()
             return redirect(url_for("personal"))
-        # Fetch remote employees
+
         with inc_conn.cursor() as inc_cur:
-            inc_cur.execute(
-                "SELECT employee_number, full_name, puesto, department_name FROM personal"
-            )
+            inc_cur.execute("SELECT employee_number, full_name, puesto, department_name FROM personal")
             remote_rows = inc_cur.fetchall()
         inc_conn.close()
+
         if not remote_rows:
             flash("No se encontraron registros en la base de incidencias", "warning")
+            conn.close()
             return redirect(url_for("personal"))
-        # Connect to local DB to check existing employees and insert new ones
+
         with conn.cursor() as cur:
-            # Build set of existing ids
+            # Existing ids normalized to 5 digits to avoid duplicates
             cur.execute("SELECT id_empleado FROM empleados")
-            existing_ids = {row["id_empleado"] for row in cur.fetchall() if row["id_empleado"]}
+            existing_ids = {normalize_emp_id(row["id_empleado"]) for row in cur.fetchall() if row.get("id_empleado")}
+
             for row in remote_rows:
-                emp_id = str(row["employee_number"]).zfill(5)
+                emp_id = normalize_emp_id(row.get("employee_number"))
                 if not emp_id or emp_id in existing_ids:
                     continue
-                nombre = row.get("full_name") or ""
-                puesto_nombre = row.get("puesto") or None
-                dept_nombre = row.get("department_name") or None
+
+                nombre = (row.get("full_name") or "").strip()
+                puesto_nombre = (row.get("puesto") or "").strip() or None
+                dept_nombre = (row.get("department_name") or "").strip() or None
+
                 # Find or create department
                 departamento_id = None
                 if dept_nombre:
@@ -791,6 +811,7 @@ def personal():
                     else:
                         cur.execute("INSERT INTO departamentos (nombre) VALUES (%s)", (dept_nombre,))
                         departamento_id = cur.lastrowid
+
                 # Find or create position
                 puesto_id = None
                 if puesto_nombre:
@@ -799,52 +820,70 @@ def personal():
                     if prow:
                         puesto_id = prow["id"]
                     else:
-                        # create new position with department if available
                         cur.execute(
                             "INSERT INTO puestos (nombre, departamento_id) VALUES (%s, %s)",
                             (puesto_nombre, departamento_id),
                         )
                         puesto_id = cur.lastrowid
-                # Insert employee
+
                 cur.execute(
                     "INSERT INTO empleados (id_empleado, nombre, puesto_id) VALUES (%s, %s, %s)",
                     (emp_id, nombre, puesto_id),
                 )
                 imported += 1
+                existing_ids.add(emp_id)
+
         flash(f"Se importaron {imported} empleados nuevos desde incidencias", "success")
-        # Close the local DB connection before redirecting
         conn.close()
         return redirect(url_for("personal"))
-    # GET: show list
-    query = request.args.get("q", "").strip()
+
+    # -----------------------------
+    # GET: list employees (paged)
+    # -----------------------------
+    query = (request.args.get("q") or "").strip()
+    try:
+        page = int(request.args.get("page", "1"))
+    except ValueError:
+        page = 1
+    page = max(1, page)
+    page_size = 100
+    offset = (page - 1) * page_size
+
+    where_sql = ""
+    params = []
+    if query:
+        where_sql = "WHERE e.id_empleado LIKE %s OR e.nombre LIKE %s"
+        params.extend([f"%{query}%", f"%{query}%"])
+
     with conn.cursor() as cur:
-        cur.execute("SELECT id, nombre FROM empleados")
-        # fetch employees filtered
-        if query:
-            cur.execute(
-                "SELECT e.id, e.id_empleado, e.nombre, p.id AS puesto_id, p.nombre AS puesto_nombre, "
-                "j.id AS jefe_id, j.nombre AS jefe_nombre, e.email "
-                "FROM empleados e "
-                "LEFT JOIN puestos p ON e.puesto_id=p.id "
-                "LEFT JOIN empleados j ON e.jefe_directo_id=j.id "
-                "WHERE e.id_empleado LIKE %s OR e.nombre LIKE %s ORDER BY e.nombre",
-                (f"%{query}%", f"%{query}%"),
-            )
-        else:
-            cur.execute(
-                "SELECT e.id, e.id_empleado, e.nombre, p.id AS puesto_id, p.nombre AS puesto_nombre, "
-                "j.id AS jefe_id, j.nombre AS jefe_nombre, e.email "
-                "FROM empleados e "
-                "LEFT JOIN puestos p ON e.puesto_id=p.id "
-                "LEFT JOIN empleados j ON e.jefe_directo_id=j.id "
-                "ORDER BY e.nombre"
-            )
+        # Count total for pagination (search applies to full table)
+        cur.execute(f"SELECT COUNT(*) AS total FROM empleados e {where_sql}", params)
+        total_count = (cur.fetchone() or {}).get("total", 0) or 0
+        total_pages = max(1, math.ceil(total_count / page_size)) if total_count else 1
+        if page > total_pages:
+            page = total_pages
+            offset = (page - 1) * page_size
+
+        # Page query
+        cur.execute(
+            "SELECT e.id, e.id_empleado, e.nombre, p.id AS puesto_id, p.nombre AS puesto_nombre, "
+            "j.id AS jefe_id, j.nombre AS jefe_nombre, e.email "
+            "FROM empleados e "
+            "LEFT JOIN puestos p ON e.puesto_id=p.id "
+            "LEFT JOIN empleados j ON e.jefe_directo_id=j.id "
+            f"{where_sql} "
+            "ORDER BY e.nombre ASC "
+            "LIMIT %s OFFSET %s",
+            params + [page_size, offset],
+        )
         empleados_list = cur.fetchall()
-        # fetch positions and employees for selects
-        cur.execute("SELECT id, nombre FROM puestos ORDER BY nombre")
+
+        # Select lists ordered alphabetically
+        cur.execute("SELECT id, nombre FROM puestos ORDER BY nombre ASC")
         puestos_simple = cur.fetchall()
-        cur.execute("SELECT id, nombre FROM empleados ORDER BY nombre")
+        cur.execute("SELECT id, nombre FROM empleados ORDER BY nombre ASC")
         jefes_simple = cur.fetchall()
+
     conn.close()
     return render_template(
         "personal.html",
@@ -852,6 +891,10 @@ def personal():
         puestos=puestos_simple,
         jefes=jefes_simple,
         query=query,
+        page=page,
+        total_pages=total_pages,
+        total_count=total_count,
+        page_size=page_size,
     )
 
 

@@ -108,5 +108,52 @@
             {% endif %}
         </tbody>
     </table>
+      <!-- Paginación -->
+      <div class="d-flex flex-wrap justify-content-between align-items-center mt-3 gap-2">
+        <div class="text-muted">
+          Mostrando {{ empleados|length }} de {{ total_count }} (página {{ page }} de {{ total_pages }})
+        </div>
+
+        {% if total_pages > 1 %}
+        <nav aria-label="Paginación personal">
+          <ul class="pagination mb-0">
+            <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+              <a class="page-link" href="{{ url_for('personal', q=query, page=page-1) }}" aria-label="Anterior">&laquo;</a>
+            </li>
+
+            {# Ventana de páginas (máx 7) #}
+            {% set start = page - 3 %}
+            {% set end = page + 3 %}
+            {% if start < 1 %}{% set start = 1 %}{% endif %}
+            {% if end > total_pages %}{% set end = total_pages %}{% endif %}
+
+            {% if start > 1 %}
+              <li class="page-item"><a class="page-link" href="{{ url_for('personal', q=query, page=1) }}">1</a></li>
+              {% if start > 2 %}
+                <li class="page-item disabled"><span class="page-link">…</span></li>
+              {% endif %}
+            {% endif %}
+
+            {% for p in range(start, end + 1) %}
+              <li class="page-item {% if p == page %}active{% endif %}">
+                <a class="page-link" href="{{ url_for('personal', q=query, page=p) }}">{{ p }}</a>
+              </li>
+            {% endfor %}
+
+            {% if end < total_pages %}
+              {% if end < total_pages - 1 %}
+                <li class="page-item disabled"><span class="page-link">…</span></li>
+              {% endif %}
+              <li class="page-item"><a class="page-link" href="{{ url_for('personal', q=query, page=total_pages) }}">{{ total_pages }}</a></li>
+            {% endif %}
+
+            <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+              <a class="page-link" href="{{ url_for('personal', q=query, page=page+1) }}" aria-label="Siguiente">&raquo;</a>
+            </li>
+          </ul>
+        </nav>
+        {% endif %}
+      </div>
+
 </div>
 {% endblock %}
